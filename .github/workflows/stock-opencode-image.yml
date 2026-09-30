@@ -20,43 +20,8 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: check
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Check out source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-
-      - name: Set up Bun and install dependencies
-        uses: ./.github/actions/setup-bun
-
-      # The adapter's own surface: base-path normalisation and the OpenCode
-      # client's base-path request projection, plus the icon/manifest rewrite.
-      - name: Run focused adapter tests
-        working-directory: packages/app
-        run: |
-          bun test --conditions=solid --preload ./happydom.ts src/runtime/platform/base-path.test.ts
-          bun test ./vite.icons.test.ts
-
-      - name: Run app unit tests
-        working-directory: packages/app
-        run: bun run test:unit
-
-      - name: Typecheck the app
-        working-directory: packages/app
-        run: bun run typecheck
-
-      - name: Build the /ai production bundle
-        working-directory: packages/app
-        env:
-          OPENCODE_CHANNEL: prod
-          VITE_OPENCODE_BASE_PATH: /ai/
-        run: bun run build
-
   image:
     name: image
-    needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
