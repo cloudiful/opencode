@@ -1,6 +1,6 @@
 # Stock OpenCode fork
 
-This fork is based on upstream OpenCode `v2.0.20` and keeps the application source-compatible with that release. The adapter is limited to the web shell, its platform URL handling, the CLI app archive build, and the container publication files.
+This fork tracks the upstream OpenCode `v2` release line. The current source baseline is upstream commit `f46fa72a9285a0e8479e25d400f7026bfd8fe5c8` on `v2`, with package version `2.0.20`. The adapter is limited to the web shell, its platform URL handling, the CLI app archive build, and the container publication files.
 
 ## Web base path
 
@@ -33,7 +33,7 @@ ghcr.io/<repository-owner>/opencode:<tag>
 
 ## Upgrade procedure
 
-1. Start from the desired upstream release tag and keep `OPENCODE_VERSION` and the package manifests aligned with that release.
+1. Select an exact commit from upstream `v2` and keep the recorded source commit, `OPENCODE_VERSION`, and package manifests aligned.
 2. Reapply the base-path adapter only within its focused source files and keep runtime API paths root-relative.
 3. Run the focused platform tests, the web build with `/ai/`, and `git diff --check`.
 4. Validate the multi-architecture Docker build before creating an adapter release tag.
