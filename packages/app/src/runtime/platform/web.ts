@@ -1,5 +1,6 @@
 import { createBrowserDraftStore } from "@/runtime/persistence/drafts"
 import { ServerConnection } from "@/runtime/server/registry"
+import { webBaseUrl } from "./base-path-runtime"
 import type { Platform } from "./platform"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
@@ -60,7 +61,7 @@ function getCurrentServerUrl() {
     const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? (loopback ? location.hostname : "localhost")
     return `http://${host}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
   }
-  return location.origin
+  return webBaseUrl(location.origin)
 }
 
 function readDefaultServerUrl() {

@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1.7
+
+FROM oven/bun:1.4.2-slim AS build
+
+WORKDIR /src
+ARG TARGETARCH
+ARG OPENCODE_VERSION=2.0.20
+ARG VITE_OPENCODE_BASE_PATH=/ai/
+ENV OPENCODE_CHANNEL=prod \
+    OPENCODE_VERSION=${OPENCODE_VERSION} \
+    VITE_OPENCODE_BASE_PATH=${VITE_OPENCODE_BASE_PATH} \
+    BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
+
+COPY . .
+RUN bun install --frozen-lockfile --os="*" --cpu="*"
+RUN case "${TARGETARCH}" in \
+      amd64) target=opencode-linux-x64-musl ;; \
+      arm64) target=opencode-linux-arm64-musl ;; \
+      *) echo "unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    bun run packages/cli/script/build.ts --single --target="${target}" --skip-install --outdir=dist-stock-opencode
+
+FROM alpine:3.22.1 AS runtime
+
+ARG OPENCODE_VERSION=2.0.20
+ENV OPENCODE_VERSION=${OPENCODE_VERSION} \
+    BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
+RUN apk add --no-cache ca-certificates libgcc libstdc++ ripgrep
+
+FROM runtime AS cli-amd64
+COPY --from=build /src/packages/cli/dist-stock-opencode/cli-linux-x64-musl/bin/opencode /usr/local/bin/opencode
+
+FROM runtime AS cli-arm64
+COPY --from=build /src/packages/cli/dist-stock-opencode/cli-linux-arm64-musl/bin/opencode /usr/local/bin/opencode
+
+ARG TARGETARCH
+FROM cli-${TARGETARCH}
+RUN ln -s opencode /usr/local/bin/opencode2 && opencode --version && opencode2 --version
+ENTRYPOINT ["opencode"]

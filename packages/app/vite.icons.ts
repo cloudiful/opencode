@@ -1,10 +1,13 @@
 import { readFileSync } from "node:fs"
 import type { Plugin } from "vite"
+import { joinBasePath, normalizeBasePath } from "./src/runtime/platform/base-path"
 import manifest from "./manifest.json" with { type: "json" }
 
-export function icons(channel: string): Plugin {
+export function icons(channel: string, basePath = "/"): Plugin {
   const selected = channel === "beta" || channel === "prod" ? channel : "dev"
+  const base = normalizeBasePath(basePath)
   const prefix = `icons/${selected}`
+  const assetPath = (fileName: string) => joinBasePath(base, `/${fileName}`)
   const files = [
     ...Object.entries({
       "favicon.ico": "icon.ico",
@@ -20,7 +23,10 @@ export function icons(channel: string): Plugin {
       fileName: "site.webmanifest",
       source: JSON.stringify({
         ...manifest,
-        icons: manifest.icons.map((icon) => ({ ...icon, src: `/${prefix}${icon.src}` })),
+        id: assetPath(""),
+        start_url: assetPath(""),
+        scope: assetPath(""),
+        icons: manifest.icons.map((icon) => ({ ...icon, src: assetPath(`${prefix}${icon.src}`) })),
       }),
       type: "application/manifest+json",
     },
@@ -33,7 +39,10 @@ export function icons(channel: string): Plugin {
     },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        const file = files.find((file) => `/${file.fileName}` === request.url?.split("?")[0])
+        const requestPath = request.url?.split("?")[0]
+        const file = files.find(
+          (file) => `/${file.fileName}` === requestPath || assetPath(file.fileName) === requestPath,
+        )
         if (!file) return next()
         response.setHeader("Content-Type", file.type)
         response.end(file.source)
@@ -43,8 +52,8 @@ export function icons(channel: string): Plugin {
       order: "pre",
       handler(html) {
         return html
-          .replace("%OPENCODE_FAVICON%", `/${prefix}/favicon.ico`)
-          .replace("%OPENCODE_APPLE_TOUCH_ICON%", `/${prefix}/apple-touch-icon.png`)
+          .replace("%OPENCODE_FAVICON%", assetPath(`${prefix}/favicon.ico`))
+          .replace("%OPENCODE_APPLE_TOUCH_ICON%", assetPath(`${prefix}/apple-touch-icon.png`))
       },
     },
   }

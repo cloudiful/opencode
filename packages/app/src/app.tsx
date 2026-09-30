@@ -4,9 +4,9 @@ import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Font } from "@opencode/ui/font"
 import { ThemeProvider } from "@opencode/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Router } from "@solidjs/router"
+import { type BaseRouterProps, Router, RouterContext, type Location } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
+import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps, useContext } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
@@ -21,6 +21,8 @@ import { SshProvider } from "@/servers/ssh/context"
 import { SshRestore } from "@/servers/ssh/restore"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
+import { stripBasePath } from "@/runtime/platform/base-path"
+import { webBasePath } from "@/runtime/platform/base-path-runtime"
 
 export { preloadRoute }
 
@@ -97,6 +99,34 @@ export function AppBaseProviders(
   )
 }
 
+function BasePathLocationAdapter(props: ParentProps) {
+  const router = useContext(RouterContext)
+  if (!router || webBasePath === "/") return props.children
+
+  const location: Location = {
+    get pathname() {
+      return stripBasePath(router.location.pathname, webBasePath) ?? router.location.pathname
+    },
+    get search() {
+      return router.location.search
+    },
+    get hash() {
+      return router.location.hash
+    },
+    get state() {
+      return router.location.state
+    },
+    get key() {
+      return router.location.key
+    },
+    get query() {
+      return router.location.query
+    },
+  }
+
+  return <RouterContext.Provider value={{ ...router, location }}>{props.children}</RouterContext.Provider>
+}
+
 export function AppInterface(props: {
   children?: JSX.Element
   defaultServer?: ServerConnection.Key
@@ -108,19 +138,21 @@ export function AppInterface(props: {
   // route changes. Draft and session routes override only their server-bound data
   // providers beneath it.
   const Root = (rootProps: ParentProps) => (
-    <TabsProvider>
-      <GlobalProvider>
-        <BodyTypography />
-        <CommandProvider>
-          <DesktopCommands />
-          <SshRestore />
-          <HighlightsProvider>
-            {props.children}
-            {rootProps.children}
-          </HighlightsProvider>
-        </CommandProvider>
-      </GlobalProvider>
-    </TabsProvider>
+    <BasePathLocationAdapter>
+      <TabsProvider>
+        <GlobalProvider>
+          <BodyTypography />
+          <CommandProvider>
+            <DesktopCommands />
+            <SshRestore />
+            <HighlightsProvider>
+              {props.children}
+              {rootProps.children}
+            </HighlightsProvider>
+          </CommandProvider>
+        </GlobalProvider>
+      </TabsProvider>
+    </BasePathLocationAdapter>
   )
 
   return (
@@ -130,7 +162,7 @@ export function AppInterface(props: {
       servers={props.servers}
     >
       <SettingsProvider>
-        <Dynamic component={props.router ?? Router} root={Root}>
+        <Dynamic component={props.router ?? Router} root={Root} base={webBasePath === "/" ? undefined : webBasePath}>
           <AppRoutes />
         </Dynamic>
       </SettingsProvider>

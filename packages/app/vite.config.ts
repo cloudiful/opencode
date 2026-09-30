@@ -1,9 +1,12 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
+import { basePathWithTrailingSlash, normalizeBasePath } from "./src/runtime/platform/base-path"
 import desktopPlugin, { channel } from "./vite.js"
 import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
+
+const basePath = normalizeBasePath(process.env.VITE_OPENCODE_BASE_PATH)
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -23,10 +26,11 @@ const sentry =
     : false
 
 export default defineConfig({
+  base: basePathWithTrailingSlash(basePath),
   plugins: [
     desktopPlugin,
-    icons(channel),
-    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
+    icons(channel, basePath),
+    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url)), basePath),
     sentry,
   ] as any,
   server: {

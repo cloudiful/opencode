@@ -1,0 +1,116 @@
+name: stock-opencode image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to publish
+        required: true
+        default: "2.0.20"
+        type: string
+  push:
+    tags:
+      - "stock-opencode-v*"
+
+concurrency:
+  group: stock-opencode-image-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Bun and install dependencies
+        uses: ./.github/actions/setup-bun
+
+      # The adapter's own surface: base-path normalisation and the OpenCode
+      # client's base-path request projection, plus the icon/manifest rewrite.
+      - name: Run focused adapter tests
+        working-directory: packages/app
+        run: |
+          bun test --conditions=solid --preload ./happydom.ts src/runtime/platform/base-path.test.ts
+          bun test ./vite.icons.test.ts
+
+      - name: Run app unit tests
+        working-directory: packages/app
+        run: bun run test:unit
+
+      - name: Typecheck the app
+        working-directory: packages/app
+        run: bun run typecheck
+
+      - name: Build the /ai production bundle
+        working-directory: packages/app
+        env:
+          OPENCODE_CHANNEL: prod
+          VITE_OPENCODE_BASE_PATH: /ai/
+        run: bun run build
+
+  image:
+    name: image
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Select image tag
+        id: tag
+        env:
+          DISPATCH_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="${DISPATCH_TAG:-2.0.20}"
+          else
+            tag="${GITHUB_REF_NAME#stock-opencode-}"
+          fi
+          tag="${tag#v}"
+          case "$tag" in
+            ""|*[!A-Za-z0-9._-]*)
+              echo "Invalid image tag: $tag" >&2
+              exit 1
+              ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish multi-architecture image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/opencode
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: >-
+          docker buildx build
+          --platform linux/amd64,linux/arm64
+          --file Dockerfile.stock-opencode
+          --tag "$IMAGE:$TAG"
+          --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
+          --label "org.opencontainers.image.version=$TAG"
+          --label "org.opencontainers.image.revision=$GITHUB_SHA"
+          --provenance=false
+          --sbom=false
+          --push
+          .

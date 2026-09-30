@@ -6,6 +6,7 @@ import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { loadInitialLocale } from "@/runtime/i18n/language"
 import { PlatformProvider } from "@/runtime/platform/platform"
+import { webPath } from "@/runtime/platform/base-path-runtime"
 import { createWebPlatform } from "@/runtime/platform/web"
 import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "@/runtime/platform/pwa"
 import { KeyboardInsets } from "@/runtime/platform/keyboard"
@@ -46,7 +47,7 @@ const clearAuthToken = () => {
 const web = createWebPlatform(pkg.version)
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js"), { once: true })
+  window.addEventListener("load", () => void navigator.serviceWorker.register(webPath("sw.js")), { once: true })
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
