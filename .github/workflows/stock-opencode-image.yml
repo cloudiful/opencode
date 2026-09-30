@@ -9,6 +9,8 @@ on:
         default: "2.0.20"
         type: string
   push:
+    branches:
+      - dev
     tags:
       - "stock-opencode-v*"
 
@@ -51,10 +53,12 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             tag="${DISPATCH_TAG:-2.0.20}"
+          elif [ "$GITHUB_REF_TYPE" = "branch" ] && [ "$GITHUB_REF_NAME" = "dev" ]; then
+            tag="latest"
           else
             tag="${GITHUB_REF_NAME#stock-opencode-}"
+            tag="${tag#v}"
           fi
-          tag="${tag#v}"
           case "$tag" in
             ""|*[!A-Za-z0-9._-]*)
               echo "Invalid image tag: $tag" >&2

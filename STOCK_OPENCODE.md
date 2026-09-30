@@ -29,7 +29,7 @@ The default build remains rooted at `/` when the variable is unset.
 ghcr.io/<repository-owner>/opencode:<tag>
 ```
 
-`.github/workflows/stock-opencode-image.yml` is the fork's publication workflow. It publishes only from an explicit workflow dispatch or a tag matching `stock-opencode-v*`; ordinary branch pushes do not publish an image. A dispatch defaults to image tag `2.0.20`, while `stock-opencode-v2.0.20` publishes `2.0.20`. Images carry `org.opencontainers.image.source`, `org.opencontainers.image.version`, and `org.opencontainers.image.revision` (`GITHUB_SHA` of the built commit). Run the local focused tests and `/ai/` build from the upgrade procedure before intentionally publishing.
+`.github/workflows/stock-opencode-image.yml` is the fork's publication workflow. Every push to `dev` publishes `latest`; a tag matching `stock-opencode-v*` publishes the version after the prefix (for example, `stock-opencode-v2.0.20` publishes `2.0.20`). An explicit workflow dispatch remains available and defaults to image tag `2.0.20`. Images carry `org.opencontainers.image.source`, `org.opencontainers.image.version`, and `org.opencontainers.image.revision` (`GITHUB_SHA` of the built commit). Run the local focused tests and `/ai/` build from the upgrade procedure before intentionally publishing.
 
 ## Upgrade procedure
 
