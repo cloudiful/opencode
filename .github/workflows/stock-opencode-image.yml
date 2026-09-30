@@ -22,19 +22,58 @@ permissions:
   contents: read
 
 jobs:
-  image:
-    name: image
+  prepare:
+    name: select image tag
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Select image tag
+        id: tag
+        env:
+          DISPATCH_TAG: ${{ inputs.image_tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="${DISPATCH_TAG:-2.0.20}"
+          elif [ "$REF_TYPE" = "branch" ] && [ "$REF_NAME" = "production" ]; then
+            tag="latest"
+          else
+            tag="${REF_NAME#stock-opencode-}"
+            tag="${tag#v}"
+          fi
+          case "$tag" in
+            ""|*[!A-Za-z0-9._-]*)
+              echo "Invalid image tag: $tag" >&2
+              exit 1
+              ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build ${{ matrix.arch }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
     steps:
       - name: Check out source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -46,36 +85,17 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Select image tag
-        id: tag
-        env:
-          DISPATCH_TAG: ${{ inputs.image_tag }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            tag="${DISPATCH_TAG:-2.0.20}"
-          elif [ "$GITHUB_REF_TYPE" = "branch" ] && [ "$GITHUB_REF_NAME" = "production" ]; then
-            tag="latest"
-          else
-            tag="${GITHUB_REF_NAME#stock-opencode-}"
-            tag="${tag#v}"
-          fi
-          case "$tag" in
-            ""|*[!A-Za-z0-9._-]*)
-              echo "Invalid image tag: $tag" >&2
-              exit 1
-              ;;
-          esac
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      - name: Build and publish multi-architecture image
+      - name: Build and publish architecture image
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/opencode
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
         run: >-
           docker buildx build
-          --platform linux/amd64,linux/arm64
+          --platform "$PLATFORM"
           --file Dockerfile.stock-opencode
-          --tag "$IMAGE:$TAG"
+          --tag "$IMAGE:$TAG-$ARCH"
           --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
           --label "org.opencontainers.image.version=$TAG"
           --label "org.opencontainers.image.revision=$GITHUB_SHA"
@@ -83,3 +103,32 @@ jobs:
           --sbom=false
           --push
           .
+
+  publish:
+    name: publish multi-architecture manifest
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish and inspect multi-architecture manifest
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/opencode
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          docker buildx imagetools create \
+            --tag "$IMAGE:$TAG" \
+            "$IMAGE:$TAG-amd64" \
+            "$IMAGE:$TAG-arm64"
+          docker buildx imagetools inspect "$IMAGE:$TAG"
